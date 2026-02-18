@@ -1,12 +1,17 @@
 ﻿# AutoCorteMP4
 
-Versão atual: **v1.1.1**
+Versão atual: **v1.2.0**
 
 Aplicativo desktop em Python para detectar cortes/transições em vídeos MP4 e exportar segmentos automaticamente.
 
 Repositório oficial: https://github.com/Espaco-CMaker/AutoCorteMP4
 
 LLM utilizada no desenvolvimento: **OpenAI GPT-5 (Codex)**
+
+## Download
+
+- Windows 10/11 (64-bit) - `AutoCorteMP4-v1.2.0-windows-x64.exe`  
+  https://github.com/Espaco-CMaker/AutoCorteMP4/releases/download/v1.2.0/AutoCorteMP4-v1.2.0-windows-x64.exe
 
 ## Funcionalidades
 
@@ -75,6 +80,7 @@ AutocorteMP4/
 
 ## Versionamento
 
+- `v1.2.0`: release no GitHub com executável para Windows (área de download no README).
 - `v1.1.1`: política de versionamento/changelog formalizada e documentação de release.
 - `v1.1.0`: versão estável e operacional.
 - `v1.0.0`: primeira versão estável publicada no GitHub.

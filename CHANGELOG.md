@@ -6,6 +6,19 @@ Formato de versão: `X.Y.Z`
 - `Z`: correções e ajustes incrementais.
 - `Y`: versão publicada no GitHub (release).
 
+## [v1.2.0] - 2026-02-18
+
+### Adicionado
+- Seção de download no `README.md`.
+- Link direto para o executável da release no GitHub.
+
+### Alterado
+- Versão atual para `v1.2.0` no cabeçalho do `main.py`.
+- Versão atual para `v1.2.0` no `README.md`.
+
+### Distribuição
+- Executável Windows 10/11 (64-bit): `AutoCorteMP4-v1.2.0-windows-x64.exe`.
+
 ## [v1.1.1] - 2026-02-18
 
 ### Adicionado
