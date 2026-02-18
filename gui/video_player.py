@@ -1,4 +1,4 @@
-"""
+﻿"""
 Player de vídeo embutido com marcações de corte sobrepostas.
 """
 
@@ -113,7 +113,7 @@ class VideoPlayerWidget(QWidget):
         controls = QHBoxLayout()
         controls.setSpacing(6)
 
-        self.btn_play = QPushButton("▶ Play")
+        self.btn_play = QPushButton("Play")
         self.btn_play.setFixedHeight(28)
         self.btn_play.setStyleSheet("""
             QPushButton {
@@ -172,9 +172,13 @@ class VideoPlayerWidget(QWidget):
         self.canvas.set_cut_markers([])
         self.lbl_cuts.setText("0 cortes")
 
+    def set_playing(self, playing: bool):
+        self._is_playing = playing
+        self.btn_play.setText("Pause" if self._is_playing else "Play")
+
     def _on_play_pause(self):
         self._is_playing = not self._is_playing
-        self.btn_play.setText("⏸ Pause" if self._is_playing else "▶ Play")
+        self.btn_play.setText("Pause" if self._is_playing else "Play")
         self.play_pause_toggled.emit(self._is_playing)
 
     def _on_seek(self, value: int):
@@ -184,3 +188,6 @@ class VideoPlayerWidget(QWidget):
     def _fmt(self, seconds: float) -> str:
         m, s = divmod(int(seconds), 60)
         return f"{m:02d}:{s:02d}"
+
+
+

@@ -1,7 +1,8 @@
 ﻿"""
-AutoCorteMP4 v1.0.0
+AutoCorteMP4 v1.1.0
 Projeto desktop para deteccao de cortes e exportacao de segmentos MP4.
 Repositorio oficial: https://github.com/Espaco-CMaker/AutoCorteMP4
+LLM utilizada no desenvolvimento: OpenAI GPT-5 (Codex)
 """
 
 import os
@@ -28,7 +29,7 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     app.setApplicationName("AutoCorteMP4")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion("1.1.0")
 
     font = QFont("Segoe UI", 10)
     app.setFont(font)

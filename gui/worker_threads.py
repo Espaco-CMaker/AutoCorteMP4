@@ -1,4 +1,4 @@
-"""
+﻿"""
 Threads de trabalho para análise e exportação em paralelo.
 Usa QThread + sinais para comunicação segura com a GUI.
 """
@@ -19,6 +19,7 @@ class AnalysisWorker(QThread):
 
     # Sinais emitidos durante a análise
     progress = pyqtSignal(int, int, object)   # frame_atual, total_frames, FrameMotion
+    analysis_frame = pyqtSignal(object, int, int)  # frame RGB atual da analise, frame_atual, total_frames
     cut_found = pyqtSignal(dict)              # informações do corte encontrado
     finished = pyqtSignal(list)              # lista completa de cut_points
     error = pyqtSignal(str)
@@ -99,6 +100,8 @@ class AnalysisWorker(QThread):
 
                     # Emite progresso para GUI
                     self.progress.emit(frame_number, total_frames, motion)
+                    preview_rgb = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2RGB)
+                    self.analysis_frame.emit(preview_rgb, frame_number, total_frames)
 
                     frames_since = frame_number - last_cut_frame
                     if frames_since >= min_frames and len(mag_window) >= detector.window_size:
@@ -255,3 +258,6 @@ class VideoFrameWorker(QThread):
 
 
 import cv2
+
+
+

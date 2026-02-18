@@ -1,4 +1,4 @@
-"""
+﻿"""
 Janela principal do Drone Cutter GUI.
 Layout: Player | Gráfico de vetores | Painel de cortes
 Barra inferior: sensibilidade + progresso + miniaturas
@@ -126,8 +126,9 @@ class MainWindow(QMainWindow):
         self._analysis_worker = None
         self._export_worker = None
         self._frame_worker = None
+        self._analysis_live_preview = False
 
-        self.setWindowTitle("🚁  Drone Cutter")
+        self.setWindowTitle("Drone Cutter")
         self.setMinimumSize(1200, 750)
         self.setStyleSheet(STYLE)
 
@@ -135,9 +136,6 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._apply_config_to_ui()
 
-    # ──────────────────────────────────────────────
-    # CONSTRUÇÃO DA UI
-    # ──────────────────────────────────────────────
 
     def _build_ui(self):
         central = QWidget()
@@ -146,10 +144,8 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(8, 8, 8, 4)
         root.setSpacing(6)
 
-        # ── Toolbar superior ──────────────────────
         root.addLayout(self._build_toolbar())
 
-        # ── Splitter principal ────────────────────
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(4)
 
@@ -185,10 +181,8 @@ class MainWindow(QMainWindow):
         splitter.setSizes([900, 290])
         root.addWidget(splitter, stretch=1)
 
-        # ── Progresso ─────────────────────────────
         root.addLayout(self._build_progress_bar())
 
-        # ── Painel de miniaturas ──────────────────
         self.thumb_panel = ThumbnailPanel()
         root.addWidget(self.thumb_panel)
 
@@ -201,11 +195,11 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         row.setSpacing(8)
 
-        self.btn_open = QPushButton("📂  Abrir Vídeo")
+        self.btn_open = QPushButton("Abrir Vídeo")
         self.btn_open.setObjectName("primary")
         self.btn_open.setFixedHeight(34)
 
-        self.btn_output = QPushButton("📁  Pasta de Saída")
+        self.btn_output = QPushButton("Pasta de Saída")
         self.btn_output.setFixedHeight(34)
 
         self.lbl_video = QLabel("Nenhum vídeo carregado")
@@ -268,18 +262,18 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(box)
         layout.setSpacing(6)
 
-        self.btn_analyze = QPushButton("🔍  Analisar Vídeo")
+        self.btn_analyze = QPushButton("Analisar Vídeo")
         self.btn_analyze.setObjectName("primary")
         self.btn_analyze.setEnabled(False)
 
-        self.btn_export = QPushButton("✂️  Exportar Segmentos")
+        self.btn_export = QPushButton("Exportar Segmentos")
         self.btn_export.setEnabled(False)
 
         self.btn_stop = QPushButton("⏹  Parar")
         self.btn_stop.setObjectName("danger")
         self.btn_stop.setEnabled(False)
 
-        self.btn_clear = QPushButton("🗑  Limpar")
+        self.btn_clear = QPushButton("Limpar")
         self.btn_clear.setEnabled(False)
 
         layout.addWidget(self.btn_analyze)
@@ -324,9 +318,6 @@ class MainWindow(QMainWindow):
 
         return layout
 
-    # ──────────────────────────────────────────────
-    # CONEXÃO DE SINAIS
-    # ──────────────────────────────────────────────
 
     def _connect_signals(self):
         self.btn_open.clicked.connect(self._open_video)
@@ -348,9 +339,7 @@ class MainWindow(QMainWindow):
         self.slider_sensitivity.setValue(sens)
         self.spin_min_dur.setValue(self.config["export"]["min_segment_duration"])
 
-    # ──────────────────────────────────────────────
     # SLOTS DE INTERFACE
-    # ──────────────────────────────────────────────
 
     def _open_video(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -435,14 +424,15 @@ class MainWindow(QMainWindow):
             self.player.load_video(self.video_total_frames, self.video_fps)
             self._start_frame_worker()
 
-    # ──────────────────────────────────────────────
     # ANÁLISE
-    # ──────────────────────────────────────────────
 
     def _start_analysis(self):
         if not self.video_path:
             return
         self._set_busy(True, "Analisando vídeo...")
+        self._stop_frame_worker()
+        self._analysis_live_preview = True
+        self.player.set_playing(False)
         self.cuts_list.clear()
         self.cut_points.clear()
         self.player.clear_cuts()
@@ -450,6 +440,7 @@ class MainWindow(QMainWindow):
 
         self._analysis_worker = AnalysisWorker(self.video_path, self.config)
         self._analysis_worker.progress.connect(self._on_analysis_progress)
+        self._analysis_worker.analysis_frame.connect(self._on_analysis_frame)
         self._analysis_worker.cut_found.connect(self._on_cut_found)
         self._analysis_worker.finished.connect(self._on_analysis_finished)
         self._analysis_worker.error.connect(self._on_error)
@@ -463,6 +454,11 @@ class MainWindow(QMainWindow):
 
         # Atualiza gráfico de vetor em tempo real
         self.vector_plot.update_motion(motion.angle_degrees, motion.magnitude)
+
+    @pyqtSlot(object, int, int)
+    def _on_analysis_frame(self, rgb, frame_num, total):
+        if self._analysis_live_preview:
+            self.player.update_frame(rgb, frame_num, total)
 
     @pyqtSlot(dict)
     def _on_cut_found(self, cut_info: dict):
@@ -480,21 +476,22 @@ class MainWindow(QMainWindow):
 
         # Marcador no player
         self.player.add_cut_marker(ts, self.video_duration)
-        self.status.showMessage(f"{len(self.cut_points)} cortes detectados | último: {ts:.2f}s — {cut_type}")
+        self.status.showMessage(
+            f"{len(self.cut_points)} cortes detectados | último: {ts:.2f}s - {cut_type}"
+        )
 
     @pyqtSlot(list)
     def _on_analysis_finished(self, cut_points: list):
+        self._analysis_live_preview = False
+        self._start_frame_worker()
         self.cut_points = cut_points
         n = len(cut_points)
-        self.status.showMessage(f"✅ Análise concluída: {n} cortes, {n+1} segmentos")
+        self.status.showMessage(f"Análise concluída: {n} cortes, {n+1} segmentos")
         self._set_busy(False)
         self.btn_export.setEnabled(True)
         self.progress_bar.setValue(100)
         self.lbl_progress_pct.setText("100%")
 
-    # ──────────────────────────────────────────────
-    # EXPORTAÇÃO
-    # ──────────────────────────────────────────────
 
     def _start_export(self):
         if not self.cut_points and len(self.cut_points) == 0:
@@ -532,15 +529,13 @@ class MainWindow(QMainWindow):
         self._set_busy(False)
         self.progress_bar.setValue(100)
         self.lbl_progress_pct.setText("100%")
-        self.status.showMessage(f"✅ Exportação concluída: {n} segmentos salvos em {self.output_dir}")
+        self.status.showMessage(f"Exportação concluída: {n} segmentos salvos em {self.output_dir}")
         QMessageBox.information(
             self, "Exportação Concluída",
             f"{n} segmentos salvos em:\n{self.output_dir}"
         )
 
-    # ──────────────────────────────────────────────
     # PLAYER DE VÍDEO (THREAD)
-    # ──────────────────────────────────────────────
 
     def _start_frame_worker(self):
         self._stop_frame_worker()
@@ -554,14 +549,13 @@ class MainWindow(QMainWindow):
             self._frame_worker.stop()
             self._frame_worker.wait(1000)
             self._frame_worker = None
+        self._analysis_live_preview = False
 
     @pyqtSlot(object, int, int)
     def _on_frame_ready(self, rgb, frame_num, total):
         self.player.update_frame(rgb, frame_num, total)
 
-    # ──────────────────────────────────────────────
     # CONTROLES GERAIS
-    # ──────────────────────────────────────────────
 
     def _stop_all(self):
         if self._analysis_worker and self._analysis_worker.isRunning():
@@ -593,11 +587,17 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(str)
     def _on_error(self, msg: str):
+        if self._analysis_live_preview:
+            self._analysis_live_preview = False
+            self._start_frame_worker()
         self._set_busy(False)
-        self.status.showMessage(f"❌ Erro: {msg[:80]}")
+        self.status.showMessage(f"Erro: {msg[:80]}")
         QMessageBox.critical(self, "Erro", msg)
 
     def closeEvent(self, event):
         self._stop_all()
         self._stop_frame_worker()
         event.accept()
+
+
+
