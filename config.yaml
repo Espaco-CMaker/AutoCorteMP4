@@ -1,0 +1,25 @@
+optical_flow:
+  magnitude_threshold: 1.5
+  angle_change_threshold: 30      # graus — agora detecta diagonais também
+  stop_threshold: 0.6
+  window_size: 12
+  diagonal_zones: 8               # número de zonas angulares (8 = incluí diagonais de 45°)
+
+scene_change:
+  histogram_threshold: 0.35
+  ssim_threshold: 0.72
+
+export:
+  min_segment_duration: 1.0
+  output_format: mp4
+  codec: copy
+
+analysis:
+  frame_skip: 1
+  sensitivity: 0.5
+
+ui:
+  theme: dark
+  vector_plot_history: 120        # frames de histórico no gráfico
+  thumbnail_width: 160
+  thumbnail_height: 90
