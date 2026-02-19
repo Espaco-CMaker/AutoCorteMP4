@@ -4,6 +4,7 @@ Usa QThread + sinais para comunicação segura com a GUI.
 """
 
 import traceback
+import os
 from typing import List, Dict, Any
 
 import numpy as np
@@ -35,6 +36,14 @@ class AnalysisWorker(QThread):
 
     def run(self):
         try:
+            analysis_cfg = self.config.get("analysis", {})
+            requested_threads = int(analysis_cfg.get("opencv_threads", 0) or 0)
+            if requested_threads <= 0:
+                requested_threads = max(1, (os.cpu_count() or 4) - 1)
+            cv2.setNumThreads(requested_threads)
+            if hasattr(cv2, "setUseOptimized"):
+                cv2.setUseOptimized(True)
+
             detector = CutDetector(self.config)
             cut_points = []
 

@@ -13,10 +13,12 @@ export:
   min_segment_duration: 1.0
   output_format: mp4
   codec: copy
+  ffmpeg_threads: 0            # 0 = auto do ffmpeg; ajuste manual (ex.: 4) se quiser
 
 analysis:
   frame_skip: 1
   sensitivity: 0.5
+  opencv_threads: 0            # 0 = auto (cpu_count - 1); use valor fixo para testar performance
 
 ui:
   theme: dark

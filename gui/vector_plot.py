@@ -113,7 +113,7 @@ class VectorPlotWidget(QWidget):
                 mag_norm = min(1.0, mags[i] / (max_mag + 1e-6))
                 r = int(max_r * mag_norm)
 
-                angle_rad = math.radians(angles[i])
+                angle_rad = math.radians((angles[i] + 180.0) % 360.0)
                 px = cx + int(r * math.cos(angle_rad))
                 py = cy - int(r * math.sin(angle_rad))
 
@@ -135,7 +135,7 @@ class VectorPlotWidget(QWidget):
         if self.current_magnitude > 0.1:
             mag_norm = min(1.0, self.current_magnitude / (self.cut_threshold * 1.5))
             r = int(max_r * mag_norm)
-            angle_rad = math.radians(self.current_angle)
+            angle_rad = math.radians((self.current_angle + 180.0) % 360.0)
             ex = cx + int(r * math.cos(angle_rad))
             ey = cy - int(r * math.sin(angle_rad))
 
@@ -164,7 +164,7 @@ class VectorPlotWidget(QWidget):
             painter.drawEllipse(cx - 4, cy - 4, 8, 8)
 
         # Info numérica
-        angle_str = f"{self.current_angle:.1f}°"
+        angle_str = f"{(self.current_angle + 180.0) % 360.0:.1f}°"
         mag_str = f"mag: {self.current_magnitude:.2f}"
         painter.setPen(QPen(self.COLOR_TEXT))
         painter.setFont(QFont("Consolas", 8))

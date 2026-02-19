@@ -15,6 +15,7 @@ class VideoSplitter:
     def __init__(self, config: dict):
         self.codec = config["export"].get("codec", "copy")
         self.output_format = config["export"].get("output_format", "mp4")
+        self.ffmpeg_threads = int(config["export"].get("ffmpeg_threads", 0) or 0)
         self.thumb_w = config.get("ui", {}).get("thumbnail_width", 160)
         self.thumb_h = config.get("ui", {}).get("thumbnail_height", 90)
 
@@ -83,10 +84,14 @@ class VideoSplitter:
             "-ss", f"{start:.3f}",
             "-i", input_path,
             "-t", f"{duration:.3f}",
+        ]
+        if self.ffmpeg_threads > 0:
+            cmd.extend(["-threads", str(self.ffmpeg_threads)])
+        cmd.extend([
             "-c", self.codec,
             "-avoid_negative_ts", "1",
             output_path
-        ]
+        ])
         try:
             result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=300)
             return result.returncode == 0
