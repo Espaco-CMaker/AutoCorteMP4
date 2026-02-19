@@ -14,6 +14,7 @@ export:
   output_format: mp4
   codec: copy
   ffmpeg_threads: 0            # 0 = auto do ffmpeg; ajuste manual (ex.: 4) se quiser
+  export_telemetry_srt: true   # salva arquivo .srt de telemetria para cada segmento (quando existir no video)
 
 analysis:
   frame_skip: 1

@@ -20,6 +20,7 @@ class VideoCanvas(QWidget):
         self._pixmap = None
         self._cut_markers: list = []       # timestamps normalizados (0-1)
         self._current_pos: float = 0.0
+        self._telemetry_text: str = ""
         self.setMinimumSize(400, 225)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setStyleSheet("background: #0a0b0e;")
@@ -36,6 +37,10 @@ class VideoCanvas(QWidget):
 
     def set_current_position(self, pos: float):
         self._current_pos = pos
+        self.update()
+
+    def set_telemetry_text(self, text: str):
+        self._telemetry_text = text or ""
         self.update()
 
     def paintEvent(self, event):
@@ -61,6 +66,20 @@ class VideoCanvas(QWidget):
             for pos in self._cut_markers:
                 bx = ox + int(scaled.width() * pos)
                 painter.fillRect(bx - 1, oy, 3, bar_h, QColor(255, 70, 70))
+
+            # Overlay de telemetria no rodape do frame.
+            if self._telemetry_text:
+                pad = 8
+                box_h = 26
+                tx = ox + pad
+                ty = oy + scaled.height() - box_h - pad
+                tw = max(120, scaled.width() - 2 * pad)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(0, 0, 0, 150))
+                painter.drawRoundedRect(tx, ty, tw, box_h, 5, 5)
+                painter.setPen(QPen(QColor(245, 245, 245)))
+                painter.setFont(QFont("Consolas", 9))
+                painter.drawText(tx + 8, ty + 17, self._telemetry_text[:220])
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -138,6 +157,13 @@ class VideoPlayerWidget(QWidget):
         controls.addWidget(self.lbl_cuts)
         layout.addLayout(controls)
 
+        self.lbl_telemetry = QLabel("Telemetria: indisponivel")
+        self.lbl_telemetry.setWordWrap(True)
+        self.lbl_telemetry.setStyleSheet(
+            "color: #8ea2d5; font-size: 11px; background: #121626; border: 1px solid #1e2744; padding: 4px;"
+        )
+        layout.addWidget(self.lbl_telemetry)
+
     def load_video(self, total_frames: int, fps: float):
         self._total_frames = max(1, total_frames)
         self._fps = fps
@@ -171,6 +197,12 @@ class VideoPlayerWidget(QWidget):
         self._cut_frames.clear()
         self.canvas.set_cut_markers([])
         self.lbl_cuts.setText("0 cortes")
+
+    def set_telemetry_text(self, text: str):
+        shown = text.strip() if text else "Telemetria: indisponivel"
+        overlay_text = "" if shown.lower().startswith("telemetria: indisponivel") else shown
+        self.canvas.set_telemetry_text(overlay_text)
+        self.lbl_telemetry.setText(shown)
 
     def set_playing(self, playing: bool):
         self._is_playing = playing

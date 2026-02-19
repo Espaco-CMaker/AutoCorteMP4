@@ -5,6 +5,8 @@ Barra inferior: sensibilidade + progresso + miniaturas
 """
 
 import os
+import re
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -12,7 +14,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QPushButton, QLabel, QSlider, QProgressBar,
     QFileDialog, QListWidget, QListWidgetItem, QGroupBox,
-    QStatusBar, QFrame, QDoubleSpinBox, QMessageBox,
+    QStatusBar, QFrame, QDoubleSpinBox, QMessageBox, QCheckBox,
     QScrollArea, QSizePolicy
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
@@ -121,6 +123,8 @@ class MainWindow(QMainWindow):
         self.video_fps: float = 30.0
         self.video_total_frames: int = 1
         self.video_duration: float = 0.0
+        self._telemetry_entries: list = []
+        self._telemetry_idx: int = 0
 
         # Workers (threads)
         self._analysis_worker = None
@@ -276,8 +280,13 @@ class MainWindow(QMainWindow):
         self.btn_clear = QPushButton("Limpar")
         self.btn_clear.setEnabled(False)
 
+        self.chk_export_telemetry = QCheckBox("Salvar telemetria (.srt)")
+        self.chk_export_telemetry.setChecked(True)
+        self.chk_export_telemetry.setStyleSheet("color: #90a3d4; font-size: 11px;")
+
         layout.addWidget(self.btn_analyze)
         layout.addWidget(self.btn_export)
+        layout.addWidget(self.chk_export_telemetry)
         layout.addWidget(self.btn_stop)
         layout.addWidget(self.btn_clear)
         return box
@@ -329,6 +338,7 @@ class MainWindow(QMainWindow):
 
         self.slider_sensitivity.valueChanged.connect(self._on_sensitivity_changed)
         self.spin_min_dur.valueChanged.connect(self._on_min_dur_changed)
+        self.chk_export_telemetry.toggled.connect(self._on_export_telemetry_toggled)
 
         self.player.play_pause_toggled.connect(self._on_play_pause)
         self.player.seek_requested.connect(self._on_seek)
@@ -338,6 +348,8 @@ class MainWindow(QMainWindow):
         sens = int(self.config["analysis"]["sensitivity"] * 100)
         self.slider_sensitivity.setValue(sens)
         self.spin_min_dur.setValue(self.config["export"]["min_segment_duration"])
+        export_telemetry = bool(self.config.get("export", {}).get("export_telemetry_srt", True))
+        self.chk_export_telemetry.setChecked(export_telemetry)
 
     # SLOTS DE INTERFACE
 
@@ -362,6 +374,8 @@ class MainWindow(QMainWindow):
         cap.release()
 
         self.player.load_video(self.video_total_frames, self.video_fps)
+        self._load_embedded_telemetry(path)
+        self._update_telemetry_ui(0.0)
 
         # Inicia player de vídeo
         self._start_frame_worker()
@@ -403,6 +417,9 @@ class MainWindow(QMainWindow):
     def _on_min_dur_changed(self, value: float):
         self.config["export"]["min_segment_duration"] = value
 
+    def _on_export_telemetry_toggled(self, value: bool):
+        self.config.setdefault("export", {})["export_telemetry_srt"] = bool(value)
+
     def _on_play_pause(self, playing: bool):
         if self._frame_worker:
             self._frame_worker.pause(not playing)
@@ -422,6 +439,8 @@ class MainWindow(QMainWindow):
             self.video_total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             cap.release()
             self.player.load_video(self.video_total_frames, self.video_fps)
+            self._load_embedded_telemetry(path)
+            self._update_telemetry_ui(0.0)
             self._start_frame_worker()
 
     # ANÁLISE
@@ -459,6 +478,7 @@ class MainWindow(QMainWindow):
     def _on_analysis_frame(self, rgb, frame_num, total):
         if self._analysis_live_preview:
             self.player.update_frame(rgb, frame_num, total)
+            self._update_telemetry_for_frame(frame_num)
 
     @pyqtSlot(dict)
     def _on_cut_found(self, cut_info: dict):
@@ -554,6 +574,104 @@ class MainWindow(QMainWindow):
     @pyqtSlot(object, int, int)
     def _on_frame_ready(self, rgb, frame_num, total):
         self.player.update_frame(rgb, frame_num, total)
+        self._update_telemetry_for_frame(frame_num)
+
+    def _update_telemetry_for_frame(self, frame_num: int):
+        if self.video_fps <= 0:
+            return
+        timestamp = frame_num / self.video_fps
+        self._update_telemetry_ui(timestamp)
+
+    def _update_telemetry_ui(self, timestamp: float):
+        if not self._telemetry_entries:
+            self.player.set_telemetry_text("Telemetria: indisponivel")
+            return
+        while self._telemetry_idx + 1 < len(self._telemetry_entries):
+            next_start = self._telemetry_entries[self._telemetry_idx + 1][0]
+            if timestamp >= next_start:
+                self._telemetry_idx += 1
+            else:
+                break
+        start, end, text = self._telemetry_entries[self._telemetry_idx]
+        if start <= timestamp <= end:
+            self.player.set_telemetry_text(text)
+        else:
+            self.player.set_telemetry_text("Telemetria: indisponivel")
+
+    def _load_embedded_telemetry(self, video_path: str):
+        self._telemetry_entries = []
+        self._telemetry_idx = 0
+        stream_index = self._find_dji_subtitle_stream(video_path)
+        if stream_index is None:
+            return
+
+        cmd = [
+            "ffmpeg", "-v", "error",
+            "-i", video_path,
+            "-map", f"0:{stream_index}",
+            "-c:s", "srt",
+            "-f", "srt", "-"
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+            if result.returncode != 0 or not result.stdout.strip():
+                return
+            self._telemetry_entries = self._parse_srt_entries(result.stdout)
+        except Exception:
+            self._telemetry_entries = []
+
+    def _find_dji_subtitle_stream(self, video_path: str):
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-print_format", "json",
+            "-show_entries", "stream=index,codec_type,tags",
+            video_path
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if result.returncode != 0:
+                return None
+            import json
+            payload = json.loads(result.stdout or "{}")
+            for stream in payload.get("streams", []):
+                if stream.get("codec_type") != "subtitle":
+                    continue
+                tags = stream.get("tags", {}) or {}
+                handler = str(tags.get("handler_name", "")).lower()
+                if "dji.subtitle" in handler or "subtitle" in handler:
+                    return int(stream.get("index"))
+            return None
+        except Exception:
+            return None
+
+    def _parse_srt_entries(self, text: str):
+        entries = []
+        blocks = re.split(r"\r?\n\r?\n+", text.strip())
+        for block in blocks:
+            lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
+            if len(lines) < 2 or "-->" not in lines[1]:
+                continue
+            times = lines[1].split("-->")
+            if len(times) != 2:
+                continue
+            start = self._parse_srt_time(times[0].strip())
+            end = self._parse_srt_time(times[1].strip())
+            if start is None or end is None:
+                continue
+            payload = " ".join(lines[2:]).strip() if len(lines) > 2 else ""
+            if payload:
+                entries.append((start, end, payload))
+        return entries
+
+    def _parse_srt_time(self, value: str):
+        m = re.match(r"^(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})$", value)
+        if not m:
+            return None
+        h = int(m.group(1))
+        mi = int(m.group(2))
+        s = int(m.group(3))
+        ms = int(m.group(4).ljust(3, "0"))
+        return h * 3600.0 + mi * 60.0 + s + ms / 1000.0
 
     # CONTROLES GERAIS
 
@@ -582,6 +700,7 @@ class MainWindow(QMainWindow):
         self.btn_open.setEnabled(not busy)
         self.slider_sensitivity.setEnabled(not busy)
         self.spin_min_dur.setEnabled(not busy)
+        self.chk_export_telemetry.setEnabled(not busy)
         if msg:
             self.status.showMessage(msg)
 

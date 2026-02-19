@@ -3,6 +3,7 @@ Divide o vídeo usando ffmpeg e gera miniaturas dos segmentos.
 """
 
 import os
+import json
 import subprocess
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
@@ -16,6 +17,7 @@ class VideoSplitter:
         self.codec = config["export"].get("codec", "copy")
         self.output_format = config["export"].get("output_format", "mp4")
         self.ffmpeg_threads = int(config["export"].get("ffmpeg_threads", 0) or 0)
+        self.export_telemetry_srt = bool(config["export"].get("export_telemetry_srt", True))
         self.thumb_w = config.get("ui", {}).get("thumbnail_width", 160)
         self.thumb_h = config.get("ui", {}).get("thumbnail_height", 90)
 
@@ -43,6 +45,9 @@ class VideoSplitter:
         input_stem = Path(input_path).stem
         segments = []
         total = len(timestamps) - 1
+        telemetry_stream_index = (
+            self._find_dji_subtitle_stream(input_path) if self.export_telemetry_srt else None
+        )
 
         for i, (start, end) in enumerate(zip(timestamps[:-1], timestamps[1:]), 1):
             if stop_flag and stop_flag():
@@ -56,6 +61,15 @@ class VideoSplitter:
             output_path = os.path.join(output_dir, filename)
 
             success = self._extract_segment(input_path, start, duration, output_path)
+            telemetry_path = None
+            if success and telemetry_stream_index is not None:
+                telemetry_filename = f"{input_stem}_segmento_{i:03d}_telemetria.srt"
+                telemetry_path = os.path.join(output_dir, telemetry_filename)
+                telemetry_ok = self._extract_segment_telemetry(
+                    input_path, start, duration, telemetry_path, telemetry_stream_index
+                )
+                if not telemetry_ok:
+                    telemetry_path = None
 
             thumbnail = None
             if success and os.path.exists(output_path):
@@ -68,6 +82,7 @@ class VideoSplitter:
                 "end": end,
                 "duration": duration,
                 "success": success,
+                "telemetry_srt": telemetry_path,
                 "thumbnail": thumbnail,
                 "cut_type": cut_points[i-1]["type"] if i <= len(cut_points) else "fim"
             }
@@ -97,6 +112,53 @@ class VideoSplitter:
             return result.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
+
+    def _extract_segment_telemetry(
+        self,
+        input_path: str,
+        start: float,
+        duration: float,
+        output_srt: str,
+        stream_index: int
+    ) -> bool:
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", f"{start:.3f}",
+            "-i", input_path,
+            "-t", f"{duration:.3f}",
+            "-map", f"0:{stream_index}",
+            "-c:s", "srt",
+            output_srt
+        ]
+        try:
+            result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=120)
+            return result.returncode == 0 and os.path.exists(output_srt)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+
+    def _find_dji_subtitle_stream(self, input_path: str) -> Optional[int]:
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-print_format", "json",
+            "-show_entries", "stream=index,codec_type,tags",
+            input_path
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+            if result.returncode != 0:
+                return None
+            payload = json.loads(result.stdout or "{}")
+            streams = payload.get("streams", [])
+            for st in streams:
+                if st.get("codec_type") != "subtitle":
+                    continue
+                tags = st.get("tags", {}) or {}
+                handler = str(tags.get("handler_name", "")).lower()
+                if "dji.subtitle" in handler or "subtitle" in handler:
+                    return int(st.get("index"))
+            return None
+        except Exception:
+            return None
 
     def _get_duration(self, video_path: str) -> float:
         cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration",
