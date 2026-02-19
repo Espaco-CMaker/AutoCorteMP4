@@ -13,11 +13,28 @@ import yaml
 
 
 def load_config(path: str = "config.yaml") -> dict:
-    config_path = Path(path)
-    if not config_path.exists():
-        config_path = Path(__file__).parent / "config.yaml"
-    with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    requested = Path(path)
+    base_dir = Path(__file__).resolve().parent
+    meipass_dir = Path(getattr(sys, "_MEIPASS", base_dir))
+
+    candidates = []
+    if requested.is_absolute():
+        candidates.append(requested)
+    else:
+        candidates.extend([
+            requested,
+            Path.cwd() / requested,
+            base_dir / requested,
+            meipass_dir / requested,
+        ])
+
+    for config_path in candidates:
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+
+    searched = ", ".join(str(p) for p in candidates)
+    raise FileNotFoundError(f"config.yaml nao encontrado. Caminhos verificados: {searched}")
 
 
 def main() -> None:
@@ -39,9 +56,11 @@ def main() -> None:
     from gui.main_window import MainWindow
 
     window = MainWindow(config)
-    window.show()
-
-    sys.exit(app.exec())
+    try:
+        window.show()
+        sys.exit(app.exec())
+    except KeyboardInterrupt:
+        app.quit()
 
 
 if __name__ == "__main__":
